@@ -4,21 +4,76 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
+      "ModuleLoader": {
+        "$path": "src/loader/ModuleLoader.luau",
+        "$properties": {
+          "Attributes": {
+            "ClientWaitForServer": {"Bool": true},
+            "FolderSearchDepth": {"Float32": 1},
+            "LoaderTag": {"String": "LOAD_MODULE"},
+            "UseCollectionService": {"Bool": false},
+            "VerboseLoading": {"Bool": true},
+            "YieldThreshold": {"Float32": 10}
+          }
+        },
+
+        "LoadedEvent": {
+          "$className": "RemoteEvent"
+        },
+
+        "ActorForClient": {
+          "$className": "Actor",
+          "$path": "src/loader/ActorForClient"
+        },
+
+        "ActorForServer": {
+          "$className": "Actor",
+          "$path": "src/loader/ActorForServer"
+        },
+
+        "ParallelModuleLoader": {
+          "$path": "src/loader/ParallelModuleLoader.luau"
+        },
+
+        "RelocatedTemplate": {
+          "$path": "src/loader/RelocatedTemplate.luau"
+        }
+      },
       "Shared": {
         "$path": "src/shared"
       }
     },
 
     "ServerScriptService": {
-      "Server": {
-        "$path": "src/server"
+      "StartServer": {
+        "$path": "src/server/Start/"
+      },
+
+      "Services": {
+        "$path": "src/server/Services"
+      },
+
+      "Libs": {
+      "$className": "Folder",
+      "ThingFactory": {
+        "$path": "src/server/Libs/ThingFactory.luau"
+      },
+      "ThingPool": {
+        "$path": "src/server/Libs/ThingPool.luau"
+      },
+      "LuckService": {
+        "$path": "src/server/Libs/Luck/LuckService.luau"
       }
+    }
     },
 
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "Client": {
-          "$path": "src/client"
+        "StartClient": {
+          "$path": "src/client/Start/"
+        },
+        "Ui": {
+          "$path": "src/client/ui"
         }
       }
     }
