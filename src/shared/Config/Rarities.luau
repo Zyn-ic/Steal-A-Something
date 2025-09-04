@@ -10,17 +10,17 @@
 --   EventOnly: boolean? (if true, only include when an event enables it)
 
 export type RarityConfig = {
-	Chance: number,
-	Colour: Color3,
-	ChatAnnouncement: boolean,
+	Chance: number?,
+	Colour: Color3?,
+	ChatAnnouncement: boolean?,
 	VisualTier: number?,
 	VFX: string?,
 	EventOnly: boolean?,
 }
 
-export type Rarities = { [string]: RarityConfig }
+export type RaritiesTable = { [string]: RarityConfig }
 
-local Rarities: Rarities = {
+local Rarities: RaritiesTable = {
 	-- Core rarities (always available)
 	Common = {
 		Chance = 60,
@@ -109,4 +109,4 @@ local Rarities: Rarities = {
 	},
 }
 
-return Rarities
+return table.freeze(Rarities)
