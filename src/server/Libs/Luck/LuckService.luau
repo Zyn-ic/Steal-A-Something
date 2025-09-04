@@ -1,260 +1,219 @@
--- LuckService (library)
--- Handles luck multipliers + roll logic for rarities/mutations/traits.
--- This is intentionally a "lib" (no Roblox-specific side-effects); services call it.
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Require Rarities config from ReplicatedStorage.Shared.Config.Rarities
-local Rarities = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("Rarities"))
+--@author: yyumchi
+--@date: 2025-09-03
+--[[@description:
+    A secure, stateless luck service that combines high-entropy seeded RNG with
+    distinct luck mechanics. It supports multiple rolls, roll quality boosts,
+    and additive rarity chance boosts. Works with a dictionary-based rarity pool.
+]]
+-----------------------------
+-- VARIABLES --
+-----------------------------
 
 local Module = {}
 
--- Base luck multiplier (1.0 = default)
-Module.BaseLuck = 1.0
+-- Services
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 
--- Per-event multipliers (string->multiplier)
-Module.EventMultipliers = {} :: { [string]: number }
+-- CONSTANTS --
 
--- Optional per-player luck (userId -> multiplier)
-Module.PlayerLuck = {} :: { [number]: number }
+local DEFAULT_LUCK_CAP = 8 -- Default maximum number of rolls.
 
--- Maximum attempts we will allow (safety cap)
-Module.MaxAttempts = 8
+-----------------------------
+-- PRIVATE VARIABLES --
+-----------------------------
 
--- Fractional luck will probabilistically grant an extra attempt
--- e.g. luck = 2.7 -> 2 attempts + 70% chance of a 3rd attempt
+local _rollCounter = 0
 
--- Helper: clamp
-local function clamp(val: number, a: number, b: number)
-	if val < a then return a end
-	if val > b then return b end
-	return val
+-----------------------------
+-- PRIVATE FUNCTIONS --
+-----------------------------
+
+--[[
+    Creates a high-entropy seed for the Random object by mixing multiple sources.
+]]
+local function _makeSeed(playerUserId: number?): number
+	_rollCounter += 1
+	local guid = HttpService:GenerateGUID(false)
+	local digits = guid:gsub("%D", "")
+	local guidPart = tonumber(digits:sub(1, 9)) or 0
+	local timePart = math.floor(tick() * 1000) % 2147483647
+	local counterPart = _rollCounter % 2147483647
+	local playerPart = (playerUserId or 0) % 2147483647
+	local seed = (
+		((guidPart * 1664525) % 2147483647)
+		+ ((timePart * 1013904223) % 2147483647)
+		+ ((counterPart * 1103515245) % 2147483647)
+		+ ((playerPart * 22695477) % 2147483647)
+	) % 2147483647
+	return (seed <= 0 and seed + 1 or seed)
 end
 
--- Helper: sample weighted map. weights: { key -> weight }
-local function sampleWeighted(weights: { [string]: number })
-	local total = 0
-	for _, v in pairs(weights) do
-		total += v
-	end
-	if total <= 0 then
-		-- no weights, return any key
-		for k, _ in pairs(weights) do
-			return k
+--[[
+    Calculates the final number of rolls, applying multipliers and the cap.
+]]
+local function _calculateRolls(baseLuck: number, multiplier: number, luckCap: number): number
+	local totalRolls = math.floor(baseLuck * multiplier)
+	return math.min(totalRolls, luckCap)
+end
+
+--[[
+    Filters the base rarity pool to include/exclude EventOnly items.
+]]
+local function _buildValidRarityPool(basePool: {}, eventName: string?): {}
+	local validPool = {}
+	for name, config in pairs(basePool) do
+		-- Include if it's not an event item, OR if it IS an event item and an event is active.
+		if not config.EventOnly or (config.EventOnly and eventName) then
+			validPool[name] = config
 		end
+	end
+	return validPool
+end
+
+--[[
+    Creates a temporary, modified rarity pool with specific rarity chances boosted.
+]]
+local function _getBoostedRarityPool(originalPool: {}, rarityBooster: { [string]: number }): {}
+	local boostedPool = {}
+	for name, config in pairs(originalPool) do boostedPool[name] = table.clone(config) end
+	
+	local totalBoost = 0
+	local unboostedChanceSum = 0
+
+	for name, config in pairs(boostedPool) do
+		if rarityBooster[name] then
+			local boostAmount = rarityBooster[name]
+			config.Chance += boostAmount
+			totalBoost += boostAmount
+		else
+			unboostedChanceSum += config.Chance
+		end
+	end
+
+	if totalBoost == 0 or unboostedChanceSum <= 0 then return boostedPool end
+
+	for name, config in pairs(boostedPool) do
+		if not rarityBooster[name] then
+			local proportion = config.Chance / unboostedChanceSum
+			config.Chance -= totalBoost * proportion
+		end
+	end
+
+	return boostedPool
+end
+
+--[[
+    Performs a single roll against a rarity pool to determine the outcome.
+]]
+local function _getRollResult(rarityPool: {}, luckBooster: number, rng: Random): {Name: string, Config: {}}?
+	local entries = {}
+	local totalChance = 0
+	for name, config in pairs(rarityPool) do
+		table.insert(entries, { Name = name, Config = config })
+		totalChance = totalChance + config.Chance
+	end
+
+	if totalChance <= 0 then return #entries > 0 and entries[1] or nil end
+
+	local randomNumber = rng:NextNumber() * totalChance
+	local boostedRandomNumber = randomNumber / luckBooster
+
+	local cumulativeChance = 0
+	for _, entry in ipairs(entries) do
+		cumulativeChance += entry.Config.Chance
+		if boostedRandomNumber <= cumulativeChance then
+			return entry -- Return the entry: { Name = "Rare", Config = { ... } }
+		end
+	end
+
+	return #entries > 0 and entries[#entries] or nil -- Fallback
+end
+
+-----------------------------
+-- PUBLIC FUNCTIONS --
+-----------------------------
+
+function Module:Init() end
+function Module:Start() end
+
+--[[@description:
+    Performs rolls and returns the single best result.
+    @param options table - Parameters for the roll:
+        .BaseLuck, .RarityPool, .LuckMultiplier?, .LuckBooster?,
+        .RarityBooster?, .LuckCap?, .PlayerUserId?, .EventName?
+    @returns table? - The best rarity entry: { Name: string, Config: {} }
+]]
+function Module:Roll(options: {})
+	local summary = self:RollSummary(options)
+	return summary and summary.BestRoll or nil
+end
+
+--[[@description:
+    Performs rolls and returns a detailed summary.
+    @param options table - Parameters for the roll:
+        .BaseLuck, .RarityPool, .LuckMultiplier?, .LuckBooster?,
+        .RarityBooster?, .LuckCap?, .PlayerUserId?, .EventName? (string)
+    @returns table? - A summary table with details about the rolls.
+]]
+function Module:RollSummary(options: {
+	BaseLuck: number?,
+	RarityPool: Rarities.Rarities?,
+	LuckMultiplier: number?,
+	LuckBooster: number?,
+	RarityBooster: number?,
+	LuckCap: number?,
+	EventName: string?,
+	PlayerUserId: number?
+})
+	local baseLuck = options.BaseLuck or 1
+	local baseRarityPool = options.RarityPool or {}
+	local multiplier = options.LuckMultiplier or 1
+	local luckBooster = options.LuckBooster or 0
+	local rarityBooster = options.RarityBooster or 0
+	local luckCap = options.LuckCap or DEFAULT_LUCK_CAP
+	local eventName = options.EventName
+	
+	if not baseRarityPool or next(baseRarityPool) == nil then
+		warn("[LuckService] RollSummary called with an empty or nil RarityPool.")
 		return nil
 	end
 
-	local roll = math.random() * total
-	local sum = 0
-	for k, v in pairs(weights) do
-		sum += v
-		if roll <= sum then
-			return k
-		end
-	end
-	-- fallback
-	for k, _ in pairs(weights) do
-		return k
-	end
-	return nil
-end
-
--- Helper: compute "rarity score" to pick best result from multiple samples.
--- Uses VisualTier (higher = rarer) if provided; otherwise uses Chance (lower chance -> rarer).
-local function rarityScore(cfg: any)
-	-- prefer VisualTier as primary
-	if type(cfg.VisualTier) == "number" then
-		-- larger VisualTier => rarer => we want higher score
-		return cfg.VisualTier * 1000 -- scale to dominate chance differences
-	end
-	-- fallback: smaller Chance is rarer, invert it.
-	local chance = cfg.Chance or 1
-	-- invert (smaller chance => larger score)
-	return 1 / math.max(tonumber(chance) or 1, 0.0001)
-end
-
--- Build rarity weight map for sampling, respecting eventOnly flags
--- context = { eventName = string? }
-function Module.BuildRarityWeights(context: { eventName: string? }?)
-	local eventName
-	if context then
-		eventName = context.eventName
-	end
-
-	local weights = {} :: { [string]: number }
-
-	for name, cfg in pairs(Rarities) do
-		local include = true
-		if cfg.EventOnly then
-			-- only include event-only rarities when an event is active AND matches prefix or exact event
-			if not eventName then
-				include = false
-			else
-				-- include event rarities when an eventName is provided
-				include = true
-			end
-		end
-
-		if include then
-			weights[name] = cfg.Chance or 0
-		end
-	end
-
-	return weights
-end
-
--- Returns effective luck multiplier for a given context
--- context = { eventName = string?, playerUserId = number? }
--- NOTE: This now enforces the MaxAttempts cap so the returned luck will never exceed Module.MaxAttempts.
-function Module.GetEffectiveLuck(context: { eventName: string?, playerUserId: number? }?)
-	local luck = Module.BaseLuck or 1.0
-
-	if context then
-		-- apply event multiplier if present
-		if context.eventName and Module.EventMultipliers[context.eventName] then
-			luck = luck * (Module.EventMultipliers[context.eventName] or 1.0)
-		end
-
-		-- apply player-specific luck if present (multiplicative)
-		if context.playerUserId and Module.PlayerLuck[context.playerUserId] then
-			luck = luck * (Module.PlayerLuck[context.playerUserId] or 1.0)
-		end
-	end
-
-	-- safety lower bound
-	if luck <= 0 then
-		luck = 1.0
-	end
-
-	-- Enforce the maximum luck cap so luck itself cannot exceed MaxAttempts.
-	-- This ensures later math.floor/fractional logic will only operate on a capped value.
-	if Module.MaxAttempts and type(Module.MaxAttempts) == "number" then
-		luck = math.min(luck, Module.MaxAttempts)
-	end
-
-	return luck
-end
-
--- Set global base luck (authoritative)
-function Module.SetBaseLuck(newLuck: number)
-	if type(newLuck) ~= "number" or newLuck <= 0 then
-		return false, "invalid luck"
-	end
-	Module.BaseLuck = newLuck
-	return true
-end
-
--- Add / set a temporary event multiplier. Returns a cleanup function.
-function Module.SetEventMultiplier(eventName: string, multiplier: number, durationSeconds: number?)
-	if not eventName or multiplier == nil then return false end
-	Module.EventMultipliers[eventName] = multiplier
-
-	-- schedule cleanup if duration given
-	if durationSeconds and type(durationSeconds) == "number" and durationSeconds > 0 then
-		task.spawn(function()
-			task.wait(durationSeconds)
-			-- only clear if unchanged (prevents overwriting newer multipliers)
-			if Module.EventMultipliers[eventName] == multiplier then
-				Module.EventMultipliers[eventName] = nil
-			end
-		end)
-	end
-
-	return true
-end
-
--- Set per-player multiplier (userId)
-function Module.SetPlayerLuck(userId: number, multiplier: number, durationSeconds: number?)
-	if type(userId) ~= "number" or type(multiplier) ~= "number" then return false end
-	Module.PlayerLuck[userId] = multiplier
-
-	if durationSeconds and durationSeconds > 0 then
-		task.spawn(function()
-			task.wait(durationSeconds)
-			-- clear only if unchanged
-			if Module.PlayerLuck[userId] == multiplier then
-				Module.PlayerLuck[userId] = nil
-			end
-		end)
-	end
-
-	return true
-end
-
--- Core: Roll a rarity given context
--- context = { eventName = string?, playerUserId = number? }
--- returns a table: { rarity = string?, luck = number, attempts = number, weights = table }
-function Module.RollRarity(context: { eventName: string?, playerUserId: number? }?)
-	context = context or {}
-
-	-- Build weights (take into account event-only rarities)
-	local weights = Module.BuildRarityWeights(context)
-	if not weights or next(weights) == nil then
-		-- fallback: if none, use Rarities keys
-		for name, _ in pairs(Rarities) do
-			weights[name] = 1
-		end
-	end
-
-	-- effective luck (may be fractional) - note GetEffectiveLuck returns a luck capped at MaxAttempts
-	local effLuck = Module.GetEffectiveLuck(context)
-	-- determine attempts: floor + fractional chance of extra.
-	local baseAttempts = math.floor(effLuck)
-	local fractional = effLuck - baseAttempts
-	local attempts = baseAttempts
-	if math.random() <= fractional then
-		attempts = attempts + 1
-	end
-	-- attempts are implicitly <= MaxAttempts because effLuck <= MaxAttempts
-	attempts = clamp(attempts, 1, Module.MaxAttempts)
-
-	-- For each attempt, sample a rarity and keep the "best" (rarest) by our scoring function
-	local bestName = nil
-	local bestScore = -math.huge
-
-	for _i = 1, attempts do
-		local pick = sampleWeighted(weights)
-		if pick then
-			local cfg = Rarities[pick] or {}
-			local score = rarityScore(cfg)
-			-- prefer higher score (rarer)
-			if score > bestScore then
-				bestScore = score
-				bestName = pick
+	local rng = Random.new(_makeSeed(options.PlayerUserId))
+	local totalRolls = _calculateRolls(baseLuck, multiplier, luckCap)
+    
+	local validPool = _buildValidRarityPool(baseRarityPool, eventName)
+	local rollPool = rarityBooster and _getBoostedRarityPool(validPool, rarityBooster) or validPool
+	
+	local allRolls = {}
+	local bestResult = nil
+	
+	for _ = 1, totalRolls do
+		local currentResult = _getRollResult(rollPool, luckBooster, rng)
+		if currentResult then
+			table.insert(allRolls, currentResult)
+			-- The "best" result is the one with the highest VisualTier
+			if not bestResult or currentResult.Config.VisualTier > bestResult.Config.VisualTier then
+				bestResult = currentResult
 			end
 		end
 	end
 
-	-- If no pick (shouldn't happen), fallback to random
-	if not bestName then
-		for name,_ in pairs(weights) do
-			bestName = name
-			break
-		end
-	end
-
-	return {
-		rarity = bestName,
-		luck = effLuck,
-		attempts = attempts,
-		weights = weights
+	local summary = {
+		LuckDetails = { Base = baseLuck, Multiplier = multiplier, Booster = luckBooster, Cap = luckCap },
+		RollsMade = totalRolls,
+		EventName = eventName or "None",
+		AllRolls = allRolls,
+		BestRoll = bestResult,
+		RarityBoosterApplied = rarityBooster or "None",
 	}
+
+	return summary
 end
 
--- Convenience wrapper: Roll and return a string summary
-function Module.RollSummary(context: { eventName: string?, playerUserId: number? }?)
-	local res = Module.RollRarity(context)
-	return string.format("Luck=%.2f Attempts=%d Rarity=%s", res.luck or 0, res.attempts or 0, res.rarity or "Unknown"), res
-end
-
--- Init / Start (loader-compatible)
-function Module:Init()
-	-- no heavy initialization; placeholder for loader.
-end
-
-function Module:Start()
-	-- nothing required at start currently
-end
+-----------------------------
+--MAIN--
+-----------------------------
 
 return Module

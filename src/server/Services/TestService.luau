@@ -1,53 +1,60 @@
---!strict
--- Simple TestService to exercise LuckService
--- This service demonstrates how to call LuckService and prints results
-
+--@author: yyumchi
+--@date: 2025-09-03
+--[[@description:
+	Short description here.
+]]
+-----------------------------
+-- VARIABLES --
+-----------------------------
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-
--- Require the LuckService (lib) from ServerScriptService.Libs
--- (Rojo mapping: src/server/Libs -> ServerScriptService.Libs)
 local LuckService = require(ServerScriptService.Libs.LuckService)
+local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
+local TestService = {}
 
-local Module = {}
+-- CONSTANTS --
 
-function Module:Init()
-	-- no-op for now
+-----------------------------
+-- PRIVATE FUNCTIONS --
+
+-----------------------------
+-- PUBLIC FUNCTIONS --
+
+function TestService:Init()
+	-- initialization code
 end
 
-function Module:Start()
-	-- Basic test: run a few rolls under different conditions
-	print("[TestService] Starting luck tests...")
+function TestService:Start()
+	-- start / runtime code
+	print("--- Performing a normal roll ---")
+	local normalRollSummary = LuckService:RollSummary({
+		BaseLuck = 2,
+		RarityPool = Rarities,
+		LuckMultiplier = 2,
+	})
 
-	-- 1) baseline luck (default)
-	local summary, _data = LuckService.RollSummary()
-	print("[TestService] Default roll ->", summary)
-
-	-- 2) bump base luck to 2.5
-	LuckService.SetBaseLuck(2.5)
-	local summary2 = LuckService.RollSummary()
-	print("[TestService] After SetBaseLuck(2.5) ->", summary2)
-
-	-- 3) test event multiplier (x2) for a fake event "PixelFestival"
-	LuckService.SetEventMultiplier("PixelFestival", 2.0, 10) -- lasts 10s
-	local summary3 = LuckService.RollSummary({ eventName = "PixelFestival" })
-	print("[TestService] During PixelFestival (x2 event multiplier) ->", summary3)
-
-	-- 4) test player-specific luck (user id 12345)
-	LuckService.SetPlayerLuck(12345, 3.0, 5) -- temporary
-	local summary4 = LuckService.RollSummary({ playerUserId = 12345 })
-	print("[TestService] Player 12345 with x3 luck ->", summary4)
-
-	-- 5) run a short randomized batch to see distribution
-	print("[TestService] Batch sampling (20 rolls) with current multipliers...")
-	for i = 1, 20 do
-		local s, _d = LuckService.RollSummary({ eventName = "PixelFestival", playerUserId = 12345 })
-		print("[TestService] Roll", i, s)
+	if normalRollSummary and normalRollSummary.BestRoll then
+		print("Best normal roll:", normalRollSummary.BestRoll.Name)
 	end
 
-	-- reset base luck for safety (optional)
-	LuckService.SetBaseLuck(1.0)
+	-- Example 2: A roll during the "Pixel" event
+	print("\n--- Performing a roll during the Pixel event ---")
+	local eventRollSummary = LuckService:RollSummary({
+		BaseLuck = 10,
+		RarityPool = Rarities,
+		LuckMultiplier = 2,
+		EventName = "PixelFestival" -- This activates the EventOnly items
+	})
 
-	print("[TestService] Luck tests finished.")
+	if eventRollSummary and eventRollSummary.BestRoll then
+		print("Best event roll:", eventRollSummary.BestRoll.Name)
+		print("VFX:", eventRollSummary.BestRoll.Config.VFX)
+		print("Announcement:", eventRollSummary.BestRoll.Config.ChatAnnouncement)
+	end
 end
 
-return Module
+-----------------------------
+--MAIN--
+-----------------------------
+
+return TestService

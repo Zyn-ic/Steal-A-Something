@@ -1,196 +1,192 @@
-# LuckService — README 🧠✨
+# LuckService — README 🎲✨
 
-A compact guide to how the `LuckService` (luck library) works, how to use it, and what we did to keep it safe from easy prediction. Short, practical, and full of examples.
+A concise guide to the stateless `LuckService` module. This document explains the core concepts, how to perform rolls, and how the system is designed to be less predictable. It's practical and full of examples to get you started quickly.
 
----
+-----
 
-## Quick summary ✅
+## Quick Summary ✅
 
-`LuckService` turns "luck" into **extra sampling attempts** when choosing rarities (and similar rolls).
+`LuckService` provides a set of tools to perform complex, weighted random rolls. The core idea is that "luck" translates into more chances to get a better outcome.
 
-* `luck` = how many roll **attempts** you get (fractional luck gives a probabilistic extra attempt).
-* Multipliers (global, event, per-player) multiply together to produce **effective luck**.
-* We **cap** luck at `MaxAttempts` to prevent runaway sampling and server cost.
-* Rolls sample a **weighted rarity pool**, then keep the *rarest* (best) result across attempts.
-* The library includes RNG-hardening to make the system **harder to predict**.
+  * **Rolls (or Attempts):** Determined by `BaseLuck` and a `LuckMultiplier`. More rolls mean more chances at a rare item.
+  * **Luck Booster:** Improves the *quality* of each roll, nudging the outcome toward rarer items on the list.
+  * **Rarity Booster:** Temporarily increases the base `Chance` of specific rarities, making them more likely to be rolled.
+  * **Best of N:** The system performs all rolls and returns the single **best** result based on the rarity's `VisualTier`.
+  * **Secure RNG:** Each roll operation uses a newly seeded `Random` object with blended server-side entropy to make outcomes **hard to predict**.
 
----
+-----
 
-## Table of contents
+## Table of Contents
 
-1. Concepts (luck, multipliers, attempts, cap)
-2. How a roll works (weights → attempts → best pick)
-3. Predictability — analysis and mitigation (what we changed) 🔐
-4. API (functions & return values) 📚
-5. Examples (short code snippets) 🧪
-6. Paid-weight boost feature (optional monetized advantage) 💸
-7. Tuning tips & FAQ ⚙️
+1.  [**Core Concepts**](#1-core-concepts-) — Luck, Multipliers, and Boosters
+2.  [**How a Roll Works**](#2-how-a-roll-works-️) — The step-by-step process
+3.  [**Predictability & Security**](#3-predictability--security-) — How we make rolls harder to guess
+4.  [**API Reference**](#4-api-reference-) — How to use the functions
+5.  [**Examples**](#5-examples-) — Putting it all together
 
----
+-----
 
-## 1) Core concepts — short & sweet 🍬
+## 1\) Core Concepts 🍬 
 
-### Luck
+These are the main inputs that control the outcome of a roll. They are all passed in a single `options` table for each call.
 
-* The base `Module.BaseLuck` (default `1.0`) is the baseline number of attempts.
-* Effective luck is `BaseLuck × EventMultiplier × PlayerMultiplier` (multiplicative stacking).
+### Rolls (`BaseLuck` & `LuckMultiplier`)
 
-### Multiplier sources
+This determines **how many attempts** you get. A higher number is always better.
 
-* `Module.BaseLuck` — global base.
-* `Module.EventMultipliers[eventName]` — event-specific (e.g. `PixelFestival`).
-* `Module.PlayerLuck[userId]` — per-player temporary bonuses.
+  * `BaseLuck`: The starting number of rolls.
+  * `LuckMultiplier`: A factor applied to `BaseLuck` (e.g., `1.5` for a 50% boost).
+  * **Total Rolls** = `floor(BaseLuck × LuckMultiplier)`, capped by `LuckCap`.
 
-All are **multiplicative**.
-
-### Attempts
-
-* `attempts = floor(effectiveLuck)`, plus a `fractional` chance to get `+1` attempt.
-  Example: `effLuck = 2.7` → 2 guaranteed attempts + 70% chance at a 3rd.
-
-### Cap (safety)
-
-* `Module.MaxAttempts` (default `8`) is the maximum number of attempts allowed.
-* We **cap the *luck* itself** to `MaxAttempts`, so fractional behaviour is evaluated on the capped value.
-  Example: If `rawLuck = 15` and `MaxAttempts = 8`, `effLuck` becomes `8` (so attempts are 8 or sometimes 8 depending on fractional part).
-
-Why? Keeps sampling predictable for performance and prevents corner-case exploits where extremely high luck causes heavy compute or trivializes loot.
-
----
-
-## 2) How a single roll works 🎲
-
-1. Build the rarity weight table from `Rarities` config. Event-only rarities are included only if an `eventName` is passed in the roll context.
-2. Compute effective luck (applies base, event, player multipliers), then **cap it** to `MaxAttempts`.
-3. Determine attempts from `effLuck` (floor + fractional probabilistic extra).
-4. For each attempt:
-
-   * Sample once from the weighted rarity map (weights come from rarities' `Chance`).
-   * Compute a `rarityScore` — rarer == higher score (we use `VisualTier` if present, otherwise inverse of `Chance`).
-   * Keep the rarity with **highest** score across attempts.
-5. Return the chosen rarity along with metadata (`luck`, `attempts`, `weights`).
-
-This approach gives better odds to rare outcomes as luck increases but prevents single-roll runaway mechanics.
-
----
-
-## 3) Predictability: can the luck be predicted? — analysis & mitigation 🔍➡️🔒
-
-### Is it predictable?
-
-* `math.random()` and the global PRNG are deterministic and can be predicted if an attacker sees enough outputs or can influence server timing. We considered this and implemented per-roll RNG isolation with blended entropy.
-
-### What we changed (mitigation)
-
-* **Per-roll RNG instance** using `Random.new(seed)` instead of the global `math.random()` state.
-* Seed is constructed from a mix of:
-
-  * `HttpService:GenerateGUID(false)` (grab numeric substring),
-  * `os.time()` (server time),
-  * a module-private counter incremented every roll,
-  * optional `playerUserId` from the roll context.
-* This reduces the chance an attacker can predict the next roll because the seed mixes GUID entropy and server-local state.
-
-> ⚠️ Note: Roblox does not provide cryptographically secure RNG. This reduces practical prediction risk but is not cryptographically secure. For cryptographic guarantees use an external/third-party randomness oracle.
-
----
-
-## 4) API reference (functions & returns) 📘
-
-> All functions are on `LuckService` (module). `context` tables use keys: `{ eventName = string?, playerUserId = number? }`.
-
-### Read-only data
-
-* `Module.BaseLuck` (number) — default 1.0.
-* `Module.MaxAttempts` (number) — default 8.
-
-### Configuration / setters
-
-* `Module.SetBaseLuck(newLuck: number) -> (bool, error?)`
-  Set global base luck. Must be > 0.
-
-* `Module.SetEventMultiplier(eventName: string, multiplier: number, durationSeconds: number?) -> bool`
-  Add/replace an event multiplier. If `durationSeconds` provided it auto-cleans.
-
-* `Module.SetPlayerLuck(userId: number, multiplier: number, durationSeconds: number?) -> bool`
-  Set per-player multiplier. Auto-cleans if `durationSeconds`.
-
-* **New:** `Module.SetPlayerWeightBoost(userId: number, rarityName: string, multiplier: number, durationSeconds: number?) -> bool`
-  Temporarily multiplies the weight (Chance) of a specific `rarityName` for a single player (useful for paid boosts). This affects `BuildRarityWeights` when `playerUserId` is present in the context.
-
-### Core roll functions
-
-* `Module.GetEffectiveLuck(context?) -> number`
-  Returns the **capped** effective luck (applies base, event, player multipliers and caps to `MaxAttempts`).
-
-* `Module.RollRarity(context?) -> { rarity = string, luck = number, attempts = number, weights = table }`
-  Performs the roll per the algorithm described and returns details.
-
-* `Module.RollSummary(context?) -> (stringSummary, dataTable)`
-  Convenience wrapper returning a formatted string and the raw data table from `RollRarity`.
-
----
-
-## 5) Examples — usage patterns ✨
-
-### Simple roll (default)
+<!-- end list -->
 
 ```lua
-local LuckService = require(ServerScriptService.Libs.LuckService)
-local summary, data = LuckService.RollSummary()
-print(summary) -- e.g. "Luck=1.00 Attempts=1 Rarity=Common"
+-- Example: A player with 10 base luck and a x2 multiplier gets 20 rolls.
+local options = { BaseLuck = 10, LuckMultiplier = 2, RarityPool = ... }
+local summary = LuckService:RollSummary(options)
+-- summary.RollsMade will be 20
 ```
 
-### Event roll (include event-only rarities)
+### Luck Booster
+
+This makes **each individual roll better**. It works by dividing the random number generated for a roll, pushing it closer to the rarer items (which are typically at the start of the probability list).
+
+  * A `LuckBooster` of `1` (the default) has no effect.
+  * A `LuckBooster` of `2` makes a roll twice as "lucky." A random result of 50 would become 25, potentially moving from "Uncommon" to "Rare."
+
+<!-- end list -->
 
 ```lua
-LuckService.SetEventMultiplier("PixelFestival", 2.0, 3600) -- x2 for 1 hour
-local summary, data = LuckService.RollSummary({ eventName = "PixelFestival" })
-print(summary)
+-- Example: Give a player a powerful boost on their roll quality.
+local options = { BaseLuck = 5, LuckBooster = 2.5, RarityPool = ... }
+local bestItem = LuckService:Roll(options)
+-- This player's 5 rolls are 2.5x more likely to land on rare items.
 ```
 
-### Player special luck
+### Rarity Booster
+
+This temporarily makes specific rarities **physically larger** on the "prize wheel" by adding to their `Chance`.
+
+  * It takes a dictionary mapping rarity names to a percentage to add (e.g., `{ Legendary = 0.5, Epic = 1 }`).
+  * The service automatically re-normalizes the other chances so the total probability remains 100%.
+
+<!-- end list -->
 
 ```lua
-LuckService.SetPlayerLuck(12345, 3.0, 30) -- player 12345 gets x3 luck for 30s
-local summary = LuckService.RollSummary({ playerUserId = 12345 })
-print(summary)
+-- Example: Make Legendary and Epic items slightly more common for this one roll.
+local options = {
+    BaseLuck = 10,
+    RarityBooster = { Legendary = 0.5, Epic = 1.0 }, -- +0.5% to Legendary, +1% to Epic
+    RarityPool = ...
+}
+local summary = LuckService:RollSummary(options)
 ```
 
-### Paid boost example (shop purchase)
+-----
+
+## 2\) How a Roll Works ⚙️
+
+Every call to `:Roll()` or `:RollSummary()` is a self-contained operation that follows these steps:
+
+1.  **Filter Pool:** A temporary `RarityPool` is built, including `EventOnly` items only if an `eventName` is provided in the options.
+2.  **Apply Rarity Boosts:** If a `RarityBooster` is provided, the chances in the temporary pool are modified and re-normalized.
+3.  **Calculate Rolls:** `BaseLuck`, `LuckMultiplier`, and `LuckCap` are used to determine the final number of roll attempts.
+4.  **Create Secure RNG:** A new `Random` object is created with a high-entropy seed for this specific operation.
+5.  **Perform Rolls:** For each attempt:
+      * A random number is generated and modified by the `LuckBooster`.
+      * The outcome (e.g., "Rare") is determined from the weighted pool.
+6.  **Find Best Result:** All roll outcomes are compared, and the one with the highest **`VisualTier`** is kept as the final result.
+7.  **Return:** The function returns either the single best item or a detailed summary of the entire process.
+
+> This stateless "best-of-N" approach ensures that luck provides a significant advantage without guaranteeing a specific outcome.
+
+-----
+
+## 3\) Predictability & Security 🔐
+
+### Can the outcome be guessed?
+
+No. While no computer-generated number is truly random, this service is designed to make outcomes **practically impossible to predict** by an exploiter, even if they have the source code.
+
+### How is this achieved?
+
+  * **Server-Side Authority:** All calculations happen on the server. The client has no control over the process.
+  * **Per-Roll Seeded RNG:** Instead of using the global `math.random()`, each call to `Roll` creates its own unique `Random.new(seed)` instance. The seed is generated using a mix of unpredictable, server-only information:
+      * `HttpService:GenerateGUID()`: A unique ID generated by the server.
+      * `tick()`: The server's high-precision clock time.
+      * `_rollCounter`: A private counter that increments on every roll from **any player**.
+      * `playerUserId`: The specific player's ID.
+
+> This blending of entropy sources means an exploiter cannot know the "secret ingredients" the server uses to create the random seed, making the outcome secure.
+
+-----
+
+## 4\) API Reference 📚 
+
+All functions are on the main `LuckService` module. The primary way to use the service is by passing an `options` table to the `Roll` or `RollSummary` functions.
+
+### Core Functions
+
+  * `Roll(options: table) -> table?`
+      * Performs the entire luck operation and returns the **single best rarity entry** found. The entry is a table containing `{ Name: string, Config: {} }`.
+  * `RollSummary(options: table) -> table?`
+      * Performs the same operation but returns a **detailed summary table** containing `LuckDetails`, `RollsMade`, `AllRolls`, `BestRoll`, etc.
+
+### `options` Table Parameters
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `BaseLuck` | `number` | `1` | The starting number of rolls. |
+| `RarityPool` | `table` | **Required** | The dictionary of rarities to roll from. |
+| `LuckMultiplier` | `number` | `1` | Multiplies `BaseLuck` to get more rolls. |
+| `LuckBooster` | `number` | `1` | Divisor to improve roll quality (higher is better). |
+| `RarityBooster`| `table` | `nil` | Dictionary of rarities to boost, e.g., `{ Rare = 5 }`. |
+| `LuckCap` | `number` | `100` | The absolute maximum number of rolls allowed. |
+| `PlayerUserId` | `number` | `nil` | Player's `UserId` for enhanced RNG security. |
+| `eventName` | `string` | `nil` | Name of an active event to include `EventOnly` rarities. |
+
+-----
+
+## 5\) Examples ✨
 
 ```lua
--- When a player buys a "Legendary Boost" we call:
-LuckService.SetPlayerWeightBoost(player.UserId, "Legendary", 2.0, 3600) -- doubles Legendary weight for 1 hour
+-- Assuming you've required the LuckService and your Rarities config table
+local LuckService = require(ServerScriptService.LuckService)
+local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 
--- When rolling for that player:
-local s, d = LuckService.RollSummary({ playerUserId = player.UserId })
-print(s) -- shows boosted probability for Legendary
+-- A player is about to open a chest
+local player = ... -- Get the player object
+local playerBaseLuck = 5 -- e.g., from a player stat
+
+--== Example 1: A simple, standard roll ==--
+local summary = LuckService:RollSummary({
+    BaseLuck = playerBaseLuck,
+    RarityPool = Rarities,
+    PlayerUserId = player.UserId
+})
+print(string.format("%s rolled %d times and got a %s!", player.Name, summary.RollsMade, summary.BestRoll.Name))
+
+
+--== Example 2: A roll with a weekend x2 luck event and a potion boost ==--
+local options = {
+    BaseLuck = playerBaseLuck,
+    RarityPool = Rarities,
+    PlayerUserId = player.UserId,
+    LuckMultiplier = 2.0, -- Weekend Event!
+    LuckBooster = 1.5     -- Player used a "Lucky Potion"
+}
+local bestItem = LuckService:Roll(options)
+print(string.format("With event and potion boosts, %s got a %s!", player.Name, bestItem.Name))
+
+
+--== Example 3: An event roll with a specific rarity boost ==--
+local eventOptions = {
+    BaseLuck = 20,
+    RarityPool = Rarities,
+    PlayerUserId = player.UserId,
+    EventName = "PixelFestival", -- This will include Pixel_* rarities
+    RarityBooster = { Pixel_Mythic = 0.25 } -- Add a 0.25% chance to Pixel_Mythic
+}
+local eventSummary = LuckService:RollSummary(eventOptions)
+print(string.format("During the %s, %s rolled a %s!", eventSummary.EventName, player.Name, eventSummary.BestRoll.Name))
 ```
-
----
-
-## 6) Paid-weight boost feature (monetization) 💸
-
-* **What it does:** Temporarily multiplies the weight (Chance) of a specific rarity for a single player. This is intended for cosmetic/vanity purchases like "boost your chance to get Legendary for 1 hour".
-* **How it affects rolls:** `BuildRarityWeights(context)` checks `Module.PlayerWeightBoosts[playerUserId]` and multiplies that player's target rarity weight by the configured multiplier before sampling.
-* **Fairness notes:** Use tempered multipliers (e.g., 1.5–3.0), limit duration, and never make boosts guarantees (never promise "guaranteed Legendary"). Log and audit purchases to prevent abuse.
-
----
-
-## 7) Tuning tips & FAQ 🛠️
-
-### Q: Should rarities' `Chance` sum to 100?
-
-A: Not necessary. `Chance` entries are **weights**. Relative sizes matter (80/20 == 8/2).
-
-### Q: Should `MaxAttempts` equal the highest possible luck?
-
-A: `MaxAttempts` is a server safety cap. Set it to what your server budget allows. If you expect players to buy huge multipliers, clamp luck (as implemented) to keep roll cost bounded.
-
-### Q: Can a skilled player "game" RNG?
-
-A: We reduce predictability using per-roll RNG seeds mixed with GUIDs and server-state. This is not cryptographically secure but reduces practical predictability for most attackers. For absolute unpredictability use an external randomness oracle.
-
----
-
