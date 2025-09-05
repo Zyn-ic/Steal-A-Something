@@ -40,7 +40,10 @@
         }
       },
       "Shared": {
-        "$path": "src/shared"
+        "$path": "src/shared",
+        "Packages": {
+          "$path" : "Packages"
+        }
       }
     },
 

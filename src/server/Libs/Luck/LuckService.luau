@@ -9,7 +9,7 @@
 -- VARIABLES --
 -----------------------------
 
-local Module = {}
+local LuckService = {}
 
 -- Services
 local HttpService = game:GetService("HttpService")
@@ -18,7 +18,7 @@ local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 
 -- CONSTANTS --
 
-local DEFAULT_LUCK_CAP = 8 -- Default maximum number of rolls.
+local DEFAULT_LUCK_CAP = 8 -- Default maximum number of rolls. make it a dynamic delcaration
 
 export type Options = {
 	BaseLuck: number?,
@@ -202,8 +202,8 @@ end
 -- PUBLIC FUNCTIONS --
 -----------------------------
 
-function Module:Init() end
-function Module:Start() end
+function LuckService:Init() end
+function LuckService:Start() end
 
 --[[@description:
     Performs rolls and returns the single best result.
@@ -220,8 +220,8 @@ function Module:Start() end
 ]]
 
 
-function Module:Roll(options: Options)
-	local summary = Module:RollSummary(options)
+function LuckService:Roll(options: Options)
+	local summary = LuckService:RollSummary(options)
 	return summary and summary.BestRoll or nil
 end
 
@@ -234,7 +234,7 @@ end
         LuckDetails = { Base = number, Multiplier = number, Booster = number, Cap = number },
         EventName = string or nil
 ]]
-function Module:RollSummary(options: Options)
+function LuckService:RollSummary(options: Options)
 	options = options or {}
 
 	-- Resolve provided pool or fallback to shared rarities
@@ -299,4 +299,4 @@ end
 --MAIN--
 -----------------------------
 
-return Module
+return LuckService
