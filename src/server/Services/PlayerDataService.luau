@@ -21,6 +21,7 @@ export type PlayerData = {
     BaseSlots : number,
     DoorCloseDuration : number,
     AllowFriends : boolean,
+    BaseType: string,
 
     Gold : IntValue,
     Diamonds : IntValue,
@@ -61,7 +62,7 @@ function OnPlayerAdded(plr:Player)
             BaseSlots = 6,
             DoorCloseDuration = 60,
             AllowFriends = false,
-            ConstantBaseNumber = 1,
+            BaseType = "Common",
 
             Gold = Instance.new("IntValue"),
             Diamonds = Instance.new("IntValue"),

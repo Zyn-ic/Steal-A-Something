@@ -3,6 +3,11 @@
 registry = "test"
 
 [[package]]
+name = "atlascreative/zoneplus"
+version = "3.2.2"
+dependencies = []
+
+[[package]]
 name = "evaera/promise"
 version = "4.0.0"
 dependencies = []
@@ -20,4 +25,4 @@ dependencies = [["Promise", "evaera/promise@4.0.0"]]
 [[package]]
 name = "rosal/steal-a-something"
 version = "0.1.0"
-dependencies = [["janitor", "howmanysmall/janitor@1.18.3"]]
+dependencies = [["Janitor", "howmanysmall/janitor@1.18.3"], ["Zoneplus", "atlascreative/zoneplus@3.2.2"]]

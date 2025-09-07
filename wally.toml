@@ -6,5 +6,6 @@ realm = "shared"
 
 [dependencies]
 Janitor = "howmanysmall/janitor@1.18.3"
+Zoneplus = "atlascreative/zoneplus@3.2.2"
 
 [server-dependencies]

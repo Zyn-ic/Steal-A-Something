@@ -177,7 +177,6 @@ local function _assignBaseInternal(player: Player, preferredBaseName: string?)
 	local ok = _setBaseOwner(finalBaseModel, player)
 	if not ok then
 		warn(("[BaseService] Failed to set owner on base '%s' for player %s"):format(finalBaseModel.Name, player.Name))
-        print(finalBaseModel)
 		return nil
 	end
 
@@ -197,8 +196,45 @@ local function _assignBaseInternal(player: Player, preferredBaseName: string?)
 	return finalBaseModel
 end
 
+local function _MakepreferredBaseName(AssignedBaseId:number)
+    local preferredBaseName = AssignedBaseId > 0 and "Base" .. AssignedBaseId or ""
+    
+    return preferredBaseName
+end
+
+
+-----------------------------
+-- PUBLIC FUNCTIONS --
+-----------------------------
+
+function BaseService:Init()
+    -- Build initial unoccupied base cache
+    _rebuildUnoccupiedCache()
+
+    Players.PlayerAdded:Connect(function(plr)
+        local plrdata = PlayerDataService:GetPlayerData(plr) 
+
+        BaseService:AssignBaseToPlayer(plr, _MakepreferredBaseName(plrdata.AssignedBaseId))
+    end)
+    Players.PlayerRemoving:Connect(function(plr)
+        BaseService:FreePlayerBase(plr)
+    end)
+end
+
+function BaseService:Start()
+    -- runtime code if you want to tick or maintain states.
+    -- For now, BaseService is event-driven so no periodic loop is necessary.
+    print("[BaseService] Started. Available bases:", (function() local n=0; for _ in pairs(UnOpcupiedBases) do n=n+1 end; return n end)())
+end
+
+-- Public API: assign base on demand; returns assigned base model or nil
+function BaseService:AssignBaseToPlayer(player:Player, preferredBaseName:string)
+    if not player then return nil end
+    return _assignBaseInternal(player, preferredBaseName)
+end
+
 -- Public: free base for a player (used on leave or manual clear)
-function BaseService:FreePlayerBase(player)
+function BaseService:FreePlayerBase(player:Player)
     if not player then return false end
     local baseModel = AssignedBases[player].BaseModel
     if not baseModel then
@@ -233,35 +269,77 @@ function BaseService:FreePlayerBase(player)
     return true
 end
 
------------------------------
--- PUBLIC FUNCTIONS --
------------------------------
+function BaseService:RefreshBase(player:Player)
+    if not player then return end
 
-function BaseService:Init()
-    -- Build initial unoccupied base cache
-    _rebuildUnoccupiedCache()
+    BaseService:FreePlayerBase(player)
 
-    Players.PlayerAdded:Connect(function(plr)
-        local plrdata = PlayerDataService:GetPlayerData(plr) 
-        local constantbase = plrdata.AssignedBaseId > 0 and "Base" .. plrdata.AssignedBaseId or ""
+	local baseModel = AssignedBases[player].BaseModel
+	if not baseModel then
+		warn(("[BaseService] No free bases available to assign to player %s"):format(player.Name))
+		return nil
+	end
 
-        BaseService:AssignBaseToPlayer(plr, constantbase)
-    end)
-    Players.PlayerRemoving:Connect(function(plr)
-        BaseService:FreePlayerBase(plr)
-    end)
-end
+	-- read player's rebirths from leaderstats (safe)
+    local PlayerData = PlayerDataService:GetPlayerData(player)
 
-function BaseService:Start()
-    -- runtime code if you want to tick or maintain states.
-    -- For now, BaseService is event-driven so no periodic loop is necessary.
-    print("[BaseService] Started. Available bases:", (function() local n=0; for _ in pairs(UnOpcupiedBases) do n=n+1 end; return n end)())
-end
+    if not baseModel or not baseModel:IsA("Model") then
+		return baseModel -- nothing to do
+	end
+    
+	local basesFolder = ReplicatedStorage:WaitForChild("Bases")
 
--- Public API: assign base on demand; returns assigned base model or nil
-function BaseService:AssignBaseToPlayer(player, preferredBaseName)
-    if not player then return nil end
-    return _assignBaseInternal(player, preferredBaseName)
+	-- Try to find a template container that matches the baseModel's name (ex: "Base1")
+	local templateContainer = basesFolder:FindFirstChild(baseModel.Name)
+
+	-- Try to find a model inside the template container - prefer "CommonBase"
+    local PlrBaseType = PlayerData.BaseType .. "Base"
+	local templateModel = templateContainer:FindFirstChild(PlrBaseType):GetChildren()[1]
+
+	-- Clone the template
+	local clone = templateModel:Clone()
+	clone.Name = baseModel.Name -- keep the same workspace name
+
+    -- Clamp rebirths: allow at least Floor1 to remain
+	local keepUpTo = math.max(1, PlayerData.Rebirths.Value)
+    --local KeepUpTo2 = math.max(6, PlayerData.BaseSlots)
+    --whenever we get a better module base then we can TODO: remove 2 slots so it visually shows for the gamepass 
+
+	-- If clone has a Floors folder, delete floors greater than keepUpTo
+	local floorsFolder = clone:FindFirstChild("Floors")
+
+	if floorsFolder then
+		for _, floor in pairs(floorsFolder:GetChildren()) do
+			-- assume naming like "Floor1", "Floor2", ...
+			local num = tonumber(string.match(floor.Name, "%d+"))
+			if num and num > keepUpTo then
+				floor:Destroy()
+			end
+		end
+	end
+
+    baseModel:Destroy()
+
+	-- Parent clone into workspace.Bases and then destroy original
+	local workspaceBases = workspace:FindFirstChild("Bases")
+	clone.Parent = workspaceBases
+
+    local ok = _setBaseOwner(clone, player)
+	if not ok then
+		warn(("[BaseService] Failed to set owner on base '%s' for player %s"):format(clone.Name, player.Name))
+		return nil
+	end
+
+	_markBaseOccupied(clone)
+	AssignedBases[player] = Base:Init({
+        owner = player,
+        baseModel = clone,
+        playerData = { BaseSlots = PlayerData.BaseSlots, BaseLevel = PlayerData.Rebirths.Value, BaseState = "Closed" }
+    } :: Base.InitPreq)
+
+    AssignedBases[player]:Start()
+	
+    return baseModel
 end
 
 -----------------------------

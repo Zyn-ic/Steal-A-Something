@@ -54,7 +54,7 @@ end
 -----------------------------
 -- PRIVATE FUNCTIONS --
 
-local function CreateBaseOwnerLabel(BaseModel:Model, PlayerName:string)
+local function _CreateBaseOwnerLabel(BaseModel:Model, PlayerName:string)
     if not BaseModel then return end
 
     local SurfaceGui = Instance.new("SurfaceGui")
@@ -84,7 +84,7 @@ local function CreateBaseOwnerLabel(BaseModel:Model, PlayerName:string)
     Name.Parent = SurfaceGui
 end
 
-local function CreateOwnerArrow(BaseModel:Model)
+local function _CreateOwnerArrow(BaseModel:Model)
 
     if not BaseModel then return end
     local OwnerGui = Instance.new("BillboardGui")
@@ -145,7 +145,7 @@ local function CreateOwnerArrow(BaseModel:Model)
 
 end
 
-local function RemoveBaseOwnerLabel(BaseModel:Model)
+local function _RemoveBaseOwnerLabel(BaseModel:Model)
     if not BaseModel then return end
     local visualstuff = BaseModel:FindFirstChild("Owner")
     for _, v in visualstuff:GetChildren() do
@@ -158,19 +158,19 @@ end
 
 function Base:Init(Req:InitPreq)
     -- initialization code
-    local self = setmetatable({}, Base)
-    self.Owner = Req.owner
-    self.BaseModel = Req.baseModel
-    self.BaseId = self.BaseModel.Name
-    self.Level = Req.playerData.BaseLevel or 1
+    local selff = setmetatable({}, Base)
+    selff.Owner = Req.owner
+    selff.BaseModel = Req.baseModel
+    selff.BaseId = selff.BaseModel.Name
+    selff.Level = Req.playerData.BaseLevel or 1
     
-    warn("init successful", self)
-    return self
+    warn("init successful", selff)
+    return selff
 end
 
 function Base:Start()
     -- start / runtime code
-    CreateBaseOwnerLabel(self.BaseModel, self.Owner.DisplayName)
+    _CreateBaseOwnerLabel(self.BaseModel, self.Owner.DisplayName)
 end
 
 -----------------------------
