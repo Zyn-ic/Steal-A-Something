@@ -7,5 +7,6 @@ realm = "shared"
 [dependencies]
 Janitor = "howmanysmall/janitor@1.18.3"
 Zoneplus = "atlascreative/zoneplus@3.2.2"
+Bytenet-max = "elitriare/bytenet-max@0.2.5"
 
 [server-dependencies]

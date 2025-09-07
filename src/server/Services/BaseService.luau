@@ -14,7 +14,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local workspace = game:GetService("Workspace")
-local Base = require(ServerScriptService.Libs.Base)
+local ServerBase = require(ServerScriptService.Libs.ServerBase)
+
+
 
 local BaseService = {}
 
@@ -22,7 +24,7 @@ local BaseService = {}
 local UnOpcupiedBases = {} :: { [string]: Instance }
 
 -- Map of assigned bases: [player] = BaseModel
-local AssignedBases = {} :: { [Player]: Base.BaseInstance}
+local AssignedBases = {} :: { [Player]: ServerBase.Base}
 
 -- CONSTANTS --
 local BASES_FOLDER_NAME = "Bases"
@@ -181,11 +183,11 @@ local function _assignBaseInternal(player: Player, preferredBaseName: string?)
 	end
 
 	_markBaseOccupied(finalBaseModel)
-	AssignedBases[player] = Base:Init({
+	AssignedBases[player] = ServerBase:Init({
         owner = player,
         baseModel = finalBaseModel,
         playerData = { BaseSlots = PlayerData.BaseSlots, BaseLevel = rebirths, BaseState = "Closed" }
-    } :: Base.InitPreq)
+    } :: ServerBase.InitPreq)
 
     AssignedBases[player]:Start()
 
@@ -331,11 +333,11 @@ function BaseService:RefreshBase(player:Player)
 	end
 
 	_markBaseOccupied(clone)
-	AssignedBases[player] = Base:Init({
+	AssignedBases[player] = ServerBase:Init({
         owner = player,
         baseModel = clone,
         playerData = { BaseSlots = PlayerData.BaseSlots, BaseLevel = PlayerData.Rebirths.Value, BaseState = "Closed" }
-    } :: Base.InitPreq)
+    } :: ServerBase.InitPreq)
 
     AssignedBases[player]:Start()
 	

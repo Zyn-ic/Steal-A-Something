@@ -43,7 +43,10 @@
         "$path": "src/shared",
         "Packages": {
           "$path" : "Packages"
-        }
+        },
+        "Base":{
+        "$path": "src/server/Libs/Base/Base.luau"
+      }
       }
     },
 
@@ -67,8 +70,8 @@
       "LuckService": {
         "$path": "src/server/Libs/Luck/LuckService.luau"
       },
-      "Base":{
-        "$path": "src/server/Libs/Base/Base.luau"
+      "ServerBase": {
+        "$path": "src/server/Libs/Base/Server.Base.luau"
       }
     }
     },
@@ -78,8 +81,12 @@
         "StartClient": {
           "$path": "src/client/Start/"
         },
-        "Ui": {
-          "$path": "src/client/ui"
+
+        "Services": {
+          "$path": "src/client/Services",
+          "ClientBase": {
+            "$path": "src/server/Libs/Base/Client.Base.luau"
+          }
         }
       }
     }
