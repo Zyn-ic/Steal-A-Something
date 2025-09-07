@@ -61,6 +61,7 @@ function OnPlayerAdded(plr:Player)
             BaseSlots = 6,
             DoorCloseDuration = 60,
             AllowFriends = false,
+            ConstantBaseNumber = 1,
 
             Gold = Instance.new("IntValue"),
             Diamonds = Instance.new("IntValue"),
@@ -78,6 +79,8 @@ function OnPlayerAdded(plr:Player)
         _self.Diamonds.Parent = dataFolder
         _self.Steals.Parent = dataFolder
         _self.Rebirths.Parent = dataFolder
+
+        PlayerData[plr] = _self
 end
 
 function OnPlayerRemoving(plr:Player)
@@ -109,9 +112,16 @@ function PlayerDataService:Start()
     game:BindToClose(Clean)
 end
 
+function PlayerDataService:GetPlayerData(plr:Player): PlayerData | nil
+    if GetPlayerData(plr) then
+        return table.clone(PlayerData[plr])
+    end
+
+    return nil
+end
 
 -----------------------------
 -- MAIN --
 -----------------------------
 
-return setmetatable(PlayerDataService, PlayerDataService)
+return PlayerDataService

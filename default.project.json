@@ -66,6 +66,9 @@
       },
       "LuckService": {
         "$path": "src/server/Libs/Luck/LuckService.luau"
+      },
+      "Base":{
+        "$path": "src/server/Libs/Base/Base.luau"
       }
     }
     },
