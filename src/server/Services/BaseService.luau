@@ -14,6 +14,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local workspace = game:GetService("Workspace")
+local Packets = require(ReplicatedStorage.Shared.Packets)
 local ServerBase = require(ServerScriptService.Libs.ServerBase)
 
 
@@ -24,7 +25,7 @@ local BaseService = {}
 local UnOpcupiedBases = {} :: { [string]: Instance }
 
 -- Map of assigned bases: [player] = BaseModel
-local AssignedBases = {} :: { [Player]: ServerBase.Base}
+local AssignedBases = {} :: { [Player]: ServerBase.ServerBase}
 
 -- CONSTANTS --
 local BASES_FOLDER_NAME = "Bases"
@@ -184,8 +185,8 @@ local function _assignBaseInternal(player: Player, preferredBaseName: string?)
 
 	_markBaseOccupied(finalBaseModel)
 	AssignedBases[player] = ServerBase:Init({
-        owner = player,
-        baseModel = finalBaseModel,
+        Owner = player,
+        BaseModel = finalBaseModel,
         playerData = { BaseSlots = PlayerData.BaseSlots, BaseLevel = rebirths, BaseState = "Closed" }
     } :: ServerBase.InitPreq)
 
@@ -218,9 +219,31 @@ function BaseService:Init()
 
         BaseService:AssignBaseToPlayer(plr, _MakepreferredBaseName(plrdata.AssignedBaseId))
     end)
+
     Players.PlayerRemoving:Connect(function(plr)
         BaseService:FreePlayerBase(plr)
     end)
+
+    Packets.ReqBaseData.queries.ReqData.listen(function(msg, player)
+        
+        local plrtofind = AssignedBases[player]
+
+        if plrtofind then
+            return plrtofind:ReturnBaseData(msg)
+        end
+
+        return {
+                Msg = "Player Does Not Have A Base",
+                Owner = plrtofind.Owner.UserId,
+                BaseModel = "",
+                playerData = {
+                    BaseLevel = 0,
+                    BaseSlots = 0,
+                    BaseState = "unknown"
+                }
+            }
+    end)
+
 end
 
 function BaseService:Start()
@@ -334,8 +357,8 @@ function BaseService:RefreshBase(player:Player)
 
 	_markBaseOccupied(clone)
 	AssignedBases[player] = ServerBase:Init({
-        owner = player,
-        baseModel = clone,
+        Owner = player,
+        BaseModel = clone,
         playerData = { BaseSlots = PlayerData.BaseSlots, BaseLevel = PlayerData.Rebirths.Value, BaseState = "Closed" }
     } :: ServerBase.InitPreq)
 

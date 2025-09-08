@@ -11,8 +11,8 @@
 export type BaseState = "Opened" | "Closed"
 
 export type InitPreq = {
-    owner: Player,
-    baseModel: Model,
+    Owner: Player,
+    BaseModel: Model,
     playerData: {
         BaseSlots: number?,
         BaseLevel: number?,
@@ -59,11 +59,12 @@ end
 function Base:Init(Req:InitPreq)
     -- initialization code
     local _self = setmetatable({}, Base)
-    _self.Owner = Req.owner
-    _self.BaseModel = Req.baseModel
+    _self.Owner = Req.Owner
+    _self.BaseModel = Req.BaseModel
     _self.BaseId = _self.BaseModel.Name
     _self.Level = Req.playerData.BaseLevel or 1
     _self.BaseSlots = Req.playerData.BaseSlots
+    _self.BaseState = Req.playerData.BaseState
     
     warn("init successful", _self)
     return _self

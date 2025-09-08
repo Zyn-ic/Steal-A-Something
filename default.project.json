@@ -3,92 +3,93 @@
   "tree": {
     "$className": "DataModel",
 
-    "ReplicatedStorage": {
-      "ModuleLoader": {
-        "$path": "src/loader/ModuleLoader.luau",
-        "$properties": {
-          "Attributes": {
-            "ClientWaitForServer": {"Bool": true},
-            "FolderSearchDepth": {"Float32": 1},
-            "LoaderTag": {"String": "LOAD_MODULE"},
-            "UseCollectionService": {"Bool": false},
-            "VerboseLoading": {"Bool": true},
-            "YieldThreshold": {"Float32": 10}
+      "ReplicatedStorage": {
+        "ModuleLoader": {
+          "$path": "src/loader/ModuleLoader.luau",
+          "$properties": {
+            "Attributes": {
+              "ClientWaitForServer": {"Bool": true},
+              "FolderSearchDepth": {"Float32": 1},
+              "LoaderTag": {"String": "LOAD_MODULE"},
+              "UseCollectionService": {"Bool": false},
+              "VerboseLoading": {"Bool": true},
+              "YieldThreshold": {"Float32": 10}
+            }
+          },
+
+          "ActorForClient": {
+            "$className": "Actor",
+            "$path": "src/loader/ActorForClient"
+          },
+
+          "ActorForServer": {
+            "$className": "Actor",
+            "$path": "src/loader/ActorForServer"
+          },
+
+          "ParallelModuleLoader": {
+            "$path": "src/loader/ParallelModuleLoader.luau"
+          },
+
+          "RelocatedTemplate": {
+            "$path": "src/loader/RelocatedTemplate.luau"
           }
         },
 
-        "LoadedEvent": {
-          "$className": "RemoteEvent"
-        },
+        "Shared": {
+          "$path": "src/shared",
+          "Packages": {
+            "$path" : "Packages"
+          },
 
-        "ActorForClient": {
-          "$className": "Actor",
-          "$path": "src/loader/ActorForClient"
-        },
-
-        "ActorForServer": {
-          "$className": "Actor",
-          "$path": "src/loader/ActorForServer"
-        },
-
-        "ParallelModuleLoader": {
-          "$path": "src/loader/ParallelModuleLoader.luau"
-        },
-
-        "RelocatedTemplate": {
-          "$path": "src/loader/RelocatedTemplate.luau"
+          "Base":{
+          "$path": "src/server/Libs/Base/Base.luau"
+          }
         }
       },
-      "Shared": {
-        "$path": "src/shared",
-        "Packages": {
-          "$path" : "Packages"
-        },
-        "Base":{
-        "$path": "src/server/Libs/Base/Base.luau"
-      }
-      }
-    },
 
-    "ServerScriptService": {
-      "StartServer": {
-        "$path": "src/server/Start/"
-      },
-
-      "Services": {
-        "$path": "src/server/Services"
-      },
-
-      "Libs": {
-      "$className": "Folder",
-      "ThingFactory": {
-        "$path": "src/server/Libs/ThingFactory.luau"
-      },
-      "ThingPool": {
-        "$path": "src/server/Libs/ThingPool.luau"
-      },
-      "LuckService": {
-        "$path": "src/server/Libs/Luck/LuckService.luau"
-      },
-      "ServerBase": {
-        "$path": "src/server/Libs/Base/Server.Base.luau"
-      }
-    }
-    },
-
-    "StarterPlayer": {
-      "StarterPlayerScripts": {
-        "StartClient": {
-          "$path": "src/client/Start/"
+      "ServerScriptService": {
+        "StartServer": {
+          "$path": "src/server/Start/"
         },
 
         "Services": {
-          "$path": "src/client/Services",
-          "ClientBase": {
-            "$path": "src/server/Libs/Base/Client.Base.luau"
+          "$path": "src/server/Services"
+        },
+
+        "Libs": {
+          "$className": "Folder",
+          "ThingFactory": {
+            "$path": "src/server/Libs/ThingFactory.luau"
+          },
+
+          "ThingPool": {
+            "$path": "src/server/Libs/ThingPool.luau"
+          },
+
+          "LuckService": {
+            "$path": "src/server/Libs/Luck/LuckService.luau"
+          },
+
+          "ServerBase": {
+            "$path": "src/server/Libs/Base/Server.Base.luau"
+          }
+        }
+      },
+
+      "StarterPlayer": {
+        "StarterPlayerScripts": {
+          "StartClient": {
+            "$path": "src/client/Start/"
+          },
+
+          "Services": {
+            "$path": "src/client/Services",
+              "ClientBase": {
+                "$path": "src/server/Libs/Base/Client.Base.luau"
+              }
           }
         }
       }
-    }
   }
 }

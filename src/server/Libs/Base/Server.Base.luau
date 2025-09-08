@@ -9,7 +9,6 @@
 -- VARIABLES --
 -----------------------------
 local Debris = game:GetService("Debris")
-local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Base = require(ReplicatedStorage.Shared.Base)
 local ServerBase = {}
@@ -25,13 +24,16 @@ export type ServerBase = Base & {
     },
     Init: (params: InitPreq) -> ServerBase,
     Start: (self: ServerBase) -> (),
+    SetState: (string) -> (),
+    ReturnBaseData: (Msg:string) -> (InitPreq, string)
+
 }
 
 
 -- CONSTANTS --
 
-local GROUP_BASE_OPEN = "BaseOpen"
-local GROUP_BASE_CLOSED = "BaseClosed"
+local GROUP_BASE_OPEN = "Open"
+local GROUP_BASE_CLOSED = "Closed"
 
 -----------------------------
 -- PRIVATE FUNCTIONS --
@@ -60,7 +62,7 @@ local function _setBaseCollisionGroup(baseModel: Model, groupName: string)
     for _, Floor in ipairs(Floors:GetChildren()) do
         local hitbox = Floor:FindFirstChild("HitBox")
         if hitbox then
-            PhysicsService:SetPartCollisionGroup(hitbox, groupName)
+            hitbox.CollisionGroup = groupName
         end
     end
     
@@ -115,6 +117,7 @@ function ServerBase:Init(params)
     -- server-specific runtime state
     _self._server = {}
     _self._server.internalId = "srv_" .. tostring(tick())
+    _self._server.LastDataRequest = 0
 
     return _self
 end
@@ -138,6 +141,48 @@ function ServerBase:SetState(newState)
     else
         _setBaseCollisionGroup(self.BaseModel, GROUP_BASE_CLOSED)
     end
+end
+
+function ServerBase:ReturnBaseData(Req:string)
+    if Req ~= "RequestBaseData" then return {
+                Msg = "invalid",
+                Owner = self.Owner.UserId,
+                BaseModel = "",
+                playerData = {
+                    BaseLevel = 0,
+                    BaseSlots = 0,
+                    BaseState = "unknown"
+                }
+            } end
+
+    local _timenow = os.clock()
+    --
+
+    if (_timenow - self._server.LastDataRequest) >= 5 or self._server.LastDataRequest == 0 then
+        -- if you asked for data 5secs or more ago or this is your first time asking for a data request
+        self._server.LastDataRequest = _timenow
+            return {
+                Msg = "success",
+                Owner = self.Owner.UserId,
+                BaseModel = self.BaseId,
+                playerData = {
+                    BaseLevel = self.Level,
+                    BaseSlots = self.BaseSlots,
+                    BaseState = self.BaseState
+                }
+            }
+    end
+
+    return {
+                Msg = "cooldown",
+                Owner = self.Owner.UserId,
+                BaseModel = "",
+                playerData = {
+                    BaseLevel = 0,
+                    BaseSlots = 0,
+                    BaseState = "unknown"
+                }
+            }
 end
 
 -----------------------------

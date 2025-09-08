@@ -10,24 +10,29 @@
 -- VARIABLES --
 -----------------------------
 local Players = game:GetService("Players")
-local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Base = require(ReplicatedStorage.Shared.Base)
+local Packets = require(ReplicatedStorage.Shared.Packets)
 
 local ClientBase = {}
-ClientBase.__index = ClientBase
-setmetatable(ClientBase, { __index = Base }) -- inherit
+ClientBase.LocalPlayerData = {}
 
-export type InitPreq = Base.InitPreq
-export type Base = Base.BaseInstance
 
-export type ClientBase = Base & {
+ type InitPreq = {
+    Owner: Player,
+    BaseModel: Model,
+    playerData: {
+        BaseSlots: number?,
+        BaseLevel: number?,
+        BaseState: string?
+    }
+}
+
+export type ClientBase = {
     _client: {
         internalId: string,
     },
     Init: (params: InitPreq) -> ClientBase,
     Start: (self: ClientBase) -> (),
-    _applyOwnerBypassToCharacter: (self: ClientBase, character: Model) -> ()
 }
 
 -- CONSTANTS --
@@ -40,7 +45,6 @@ local GROUP_OWNER_BYPASS = "OwnerBypass"
 local function _CreateOwnerArrow(BaseModel:Model)
     if not BaseModel then return end
     local ownerFolder = BaseModel:FindFirstChild("Owner")
-    if not ownerFolder then return end
 
     local OwnerGui = Instance.new("BillboardGui")
     OwnerGui.Name = "OwnerGui"
@@ -104,23 +108,35 @@ local function _applyOwnerBypassToCharacter(character: Model)
     if not character then return end
     for _, desc in ipairs(character:GetDescendants()) do
         if desc:IsA("BasePart") then
-            PhysicsService:SetPartCollisionGroup(desc, GROUP_OWNER_BYPASS)
+            desc.CollisionGroup = GROUP_OWNER_BYPASS
         end
     end
 end
 
+local function _RetrieveBase(BaseName:string)
+    return workspace.Bases:FindFirstChild(BaseName)
+end
 -----------------------------
 -- PUBLIC FUNCTIONS --
 -----------------------------
 
-function ClientBase:Init(params)
-    local _self = Base.Init(self, params)
-    setmetatable(_self, ClientBase)
+function ClientBase:Init()
 
-    _self._client = {}
-    _self._client.internalId = "cli_" .. tostring(tick())
+    local params = Packets.ReqBaseData.queries.ReqData.invoke("RequestBaseData")
 
-    return _self
+    if params["Msg"] ~= "success" then
+        warn(params["Msg"])
+        -- basically trying again in another 5 secs
+    end
+
+    ClientBase.Owner = Players:GetPlayerByUserId(params.Owner)
+    ClientBase.BaseModel = _RetrieveBase(params.BaseModel)
+    ClientBase.BaseId = ClientBase.BaseModel.Name
+    ClientBase.Level = params.playerData.BaseLevel or 1
+    ClientBase.BaseSlots = params.playerData.BaseSlots
+    ClientBase.BaseState = params.playerData.BaseState
+
+    return ClientBase
 end
 
 function ClientBase:Start()
