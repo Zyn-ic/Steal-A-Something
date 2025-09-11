@@ -32,40 +32,15 @@ export type ServerBase = Base & {
 
 -- CONSTANTS --
 
-local GROUP_BASE_OPEN = "Open"
-local GROUP_BASE_CLOSED = "Closed"
-
 -----------------------------
 -- PRIVATE FUNCTIONS --
 
--- Collects base parts that should be assigned to a collision group.
-local function _collectBaseParts(baseModel: Model)
-    local parts = {}
-    if not baseModel then
-        return parts
-    end
-
-    for _, desc in ipairs(baseModel:GetDescendants()) do
-        if desc:IsA("BasePart") then
-            table.insert(parts, desc)
-        end
-    end
-    return parts
-end
-
--- Assigns given collision group to all relevant parts of the base.
--- NOTE: collision groups must exist (created by a one-time setup).
-local function _setBaseCollisionGroup(baseModel: Model, groupName: string)
-    if not baseModel then return end
-    local Floors = baseModel:FindFirstChild("Floors")
+local function ReturnBaseHitbox(BaseModel:Model): ({BasePart}?)
+    local floors = BaseModel:FindFirstChild("Floors")
+    local hitboxes = {}
+    for _,v in floors do if v:IsA("BasePart") and v.Name == "Hitbox" then table.insert(hitboxes, v) end end
     
-    for _, Floor in ipairs(Floors:GetChildren()) do
-        local hitbox = Floor:FindFirstChild("HitBox")
-        if hitbox then
-            hitbox.CollisionGroup = groupName
-        end
-    end
-    
+    return hitboxes
 end
 
 local function _CreateBaseOwnerLabel(BaseModel:Model, PlayerName:string)
@@ -106,6 +81,21 @@ local function _RemoveBaseOwnerLabel(BaseModel:Model)
     end
 end
 
+local function SetBaseOpen(BaseModel:Model)
+    local hitboxes = ReturnBaseHitbox(BaseModel)
+
+    for _,v in hitboxes do
+        v.CanCollide = false
+    end
+end
+
+local function SetBaseClose(BaseModel:Model)
+    local hitboxes = ReturnBaseHitbox(BaseModel)
+
+    for _,v in hitboxes do
+        v.CanCollide = true
+    end
+end
 -----------------------------
 -- PUBLIC FUNCTIONS --
 
@@ -127,19 +117,20 @@ function ServerBase:Start()
     _CreateBaseOwnerLabel(self.BaseModel, self.Owner.DisplayName)
 
     if self.BaseState == "Opened" then
-        _setBaseCollisionGroup(self.BaseModel, GROUP_BASE_OPEN)
+        SetBaseOpen(self.BaseModel)
     else
-        _setBaseCollisionGroup(self.BaseModel, GROUP_BASE_CLOSED)
+        SetBaseClose(self.BaseModel)
     end
 end
 
-function ServerBase:SetState(newState)
+function ServerBase:SetState(newState:string)
     if newState ~= "Opened" and newState ~= "Closed" then return end
     self.BaseState = newState
+
     if newState == "Opened" then
-        _setBaseCollisionGroup(self.BaseModel, GROUP_BASE_OPEN)
+        SetBaseOpen(self.BaseModel)
     else
-        _setBaseCollisionGroup(self.BaseModel, GROUP_BASE_CLOSED)
+       SetBaseClose(self.BaseModel)
     end
 end
 

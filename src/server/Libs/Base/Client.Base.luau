@@ -14,10 +14,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Packets = require(ReplicatedStorage.Shared.Packets)
 
 local ClientBase = {}
-ClientBase.LocalPlayerData = {}
 
 
- type InitPreq = {
+type InitPreq = {
     Owner: Player,
     BaseModel: Model,
     playerData: {
@@ -43,8 +42,8 @@ local GROUP_OWNER_BYPASS = "OwnerBypass"
 -----------------------------
 
 local function _CreateOwnerArrow(BaseModel:Model)
-    if not BaseModel then return end
-    local ownerFolder = BaseModel:FindFirstChild("Owner")
+    if not BaseModel then print(BaseModel, "no bases"); return end
+    local ownerFolder = BaseModel:WaitForChild("Owner", 20)
 
     local OwnerGui = Instance.new("BillboardGui")
     OwnerGui.Name = "OwnerGui"
@@ -127,6 +126,9 @@ function ClientBase:Init()
     if params["Msg"] ~= "success" then
         warn(params["Msg"])
         -- basically trying again in another 5 secs
+        task.delay(5, function()
+            params = Packets.ReqBaseData.queries.ReqData.invoke("RequestBaseData")
+        end)
     end
 
     ClientBase.Owner = Players:GetPlayerByUserId(params.Owner)
@@ -141,11 +143,12 @@ end
 
 function ClientBase:Start()
     -- client-side visuals
-    _CreateOwnerArrow(self.BaseModel)
+    print(ClientBase)
+    _CreateOwnerArrow(ClientBase.BaseModel)
 
     -- If the local player is the owner, ensure their character is placed into OwnerBypass
     local localPlayer = Players.LocalPlayer
-    if localPlayer and self.Owner and localPlayer.UserId == self.Owner.UserId then
+    if localPlayer and ClientBase.Owner and localPlayer.UserId == ClientBase.Owner.UserId then
         -- apply immediately if character exists
         if localPlayer.Character or localPlayer.CharacterAdded:Wait() then
             _applyOwnerBypassToCharacter(localPlayer.Character)
